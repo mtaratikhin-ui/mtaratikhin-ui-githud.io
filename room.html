@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Комната Подростка</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #1a1a2e;
+        }
+        
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            color: white;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            min-width: 250px;
+        }
+        
+        #controls h3 {
+            margin-bottom: 15px;
+            font-size: 18px;
+            text-align: center;
+            color: #ff6b9d;
+        }
+        
+        .wall-control {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .wall-control:hover {
+            transform: translateX(5px);
+        }
+        
+        .wall-control input[type="checkbox"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .wall-control label {
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .preset-buttons {
+            margin-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            padding-top: 15px;
+        }
+        
+        .preset-btn {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+        
+        .preset-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+        }
+        
+        #info h4 {
+            color: #ff6b9d;
+            margin-bottom: 10px;
+        }
+        
+        #info p {
+            margin: 5px 0;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div id="controls">
+        <h3>🏠 Управление стенами</h3>
+        
+        <div class="wall-control">
+            <input type="checkbox" id="front-wall" checked>
+            <label for="front-wall">Передняя стена</label>
+        </div>
+        
+        <div class="wall-control">
+            <input type="checkbox" id="back-wall" checked>
+            <label for="back-wall">Задняя стена</label>
+        </div>
+        
+        <div class="wall-control">
+            <input type="checkbox" id="left-wall" checked>
+            <label for="left-wall">Левая стена</label>
+        </div>
+        
+        <div class="wall-control">
+            <input type="checkbox" id="right-wall" checked>
+            <label for="right-wall">Правая стена</label>
+        </div>
+        
+        <div class="preset-buttons">
+            <button class="preset-btn" onclick="setPreset('all')">Все стены</button>
+            <button class="preset-btn" onclick="setPreset('back-only')">Только задник</button>
+            <button class="preset-btn" onclick="setPreset('floor-only')">Только пол</button>
+        </div>
+    </div>
+    
+    <div id="info">
+        <h4>🎮 Управление:</h4>
+        <p>• ЛКМ + перетаскивание - вращение камеры</p>
+        <p>• ПКМ + перетаскивание - панорамирование</p>
+        <p>• Колесико мыши - приближение/отдаление</p>
+        <p>• Переключайте стены для лучшего вида!</p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        // Основные переменные
+        let scene, camera, renderer, controls;
+        let walls = {};
+        
+        // Инициализация сцены
+        function init() {
+            // Создаем сцену
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            
+            // Камера (изометрический вид)
+            const aspect = window.innerWidth / window.innerHeight;
+            const d = 10;
+            camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 1000);
+            camera.position.set(20, 20, 20);
+            camera.lookAt(scene.position);
+            
+            // Рендерер
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // Управление камерой
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minZoom = 0.5;
+            controls.maxZoom = 2;
+            
+            // Освещение
+            setupLighting();
+            
+            // Создаем комнату
+            createRoom();
+            
+            // Добавляем мебель
+            addFurniture();
+            
+            // Обработчики событий
+            setupEventListeners();
+            
+            // Анимация
+            animate();
+        }
+        
+        function setupLighting() {
+            // Ambient light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            // Directional light (солнце)
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            // Point light (лампа)
+            const pointLight = new THREE.PointLight(0xffaa00, 0.5, 100);
+            pointLight.position.set(0, 8, 0);
+            scene.add(pointLight);
+        }
+        
+        function createRoom() {
+            const roomWidth = 12;
+            const roomDepth = 10;
+            const roomHeight = 8;
+            
+            // Пол
+            const floorGeometry = new THREE.PlaneGeometry(roomWidth, roomDepth);
+            const floorMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x8B4513,
+                side: THREE.DoubleSide
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Ковер
+            const carpetGeometry = new THREE.PlaneGeometry(6, 4);
+            const carpetMaterial = new THREE.MeshLambertMaterial({ color: 0xFF6B6B });
+            const carpet = new THREE.Mesh(carpetGeometry, carpetMaterial);
+            carpet.rotation.x = -Math.PI / 2;
+            carpet.position.y = 0.01;
+            carpet.position.z = 1;
+            carpet.receiveShadow = true;
+            scene.add(carpet);
+            
+            // Стены
+            const wallMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xE6E6FA,
+                side: THREE.DoubleSide
+            });
+            
+            // Передняя стена
+            const frontWallGeometry = new THREE.PlaneGeometry(roomWidth, roomHeight);
+            walls.front = new THREE.Mesh(frontWallGeometry, wallMaterial);
+            walls.front.position.set(0, roomHeight/2, roomDepth/2);
+            walls.front.rotation.y = Math.PI;
+            walls.front.castShadow = true;
+            walls.front.receiveShadow = true;
+            scene.add(walls.front);
+            
+            // Задняя стена
+            const backWallGeometry = new THREE.PlaneGeometry(roomWidth, roomHeight);
+            walls.back = new THREE.Mesh(backWallGeometry, wallMaterial);
+            walls.back.position.set(0, roomHeight/2, -roomDepth/2);
+            walls.back.castShadow = true;
+            walls.back.receiveShadow = true;
+            scene.add(walls.back);
+            
+            // Окно на задней стене
+            createWindow();
+            
+            // Левая стена
+            const leftWallGeometry = new THREE.PlaneGeometry(roomDepth, roomHeight);
+            walls.left = new THREE.Mesh(leftWallGeometry, wallMaterial);
+            walls.left.position.set(-roomWidth/2, roomHeight/2, 0);
+            walls.left.rotation.y = Math.PI / 2;
+            walls.left.castShadow = true;
+            walls.left.receiveShadow = true;
+            scene.add(walls.left);
+            
+            // Правая стена
+            const rightWallGeometry = new THREE.PlaneGeometry(roomDepth, roomHeight);
+            walls.right = new THREE.Mesh(rightWallGeometry, wallMaterial);
+            walls.right.position.set(roomWidth/2, roomHeight/2, 0);
+            walls.right.rotation.y = -Math.PI / 2;
+            walls.right.castShadow = true;
+            walls.right.receiveShadow = true;
+            scene.add(walls.right);
+        }
+        
+        function createWindow() {
+            const windowGroup = new THREE.Group();
+            
+            // Рама
+            const frameMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+            const glassMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xADD8E6, 
+                transparent: true, 
+                opacity: 0.6 
+            });
+            
+            // Стекло
+            const glassGeometry = new THREE.PlaneGeometry(3, 2.5);
+            const glass = new THREE.Mesh(glassGeometry, glassMaterial);
+            glass.position.z = 0.05; // Чуть выступает от стены
+            windowGroup.add(glass);
+            
+            // Рама (верх/низ/бока)
+            const frameThick = 0.2;
+            
+            // Верх
+            const topFrame = new THREE.Mesh(new THREE.BoxGeometry(3, frameThick, 0.1), frameMaterial);
+            topFrame.position.set(0, 1.25 + frameThick/2, 0);
+            windowGroup.add(topFrame);
+            
+            // Низ
+            const bottomFrame = new THREE.Mesh(new THREE.BoxGeometry(3, frameThick, 0.1), frameMaterial);
+            bottomFrame.position.set(0, -1.25 - frameThick/2, 0);
+            windowGroup.add(bottomFrame);
+            
+            // Лево
+            const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThick, 2.5, 0.1), frameMaterial);
+            leftFrame.position.set(-1.5 - frameThick/2, 0, 0);
+            windowGroup.add(leftFrame);
+            
+            // Право
+            const rightFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThick, 2.5, 0.1), frameMaterial);
+            rightFrame.position.set(1.5 + frameThick/2, 0, 0);
+            windowGroup.add(rightFrame);
+            
+            // Перекладина по центру
+            const crossBar = new THREE.Mesh(new THREE.BoxGeometry(3, frameThick, 0.1), frameMaterial);
+            crossBar.position.set(0, 0, 0);
+            windowGroup.add(crossBar);
+            
+            // Позиционируем окно на задней стене
+            windowGroup.position.set(0, 4, -4.9); // Центр задней стены, высота 4
+            
+            scene.add(windowGroup);
+        }
+        
+        function addFurniture() {
+            // Кровать
+            createBed();
+            
+            // Стол
+            createDesk();
+            
+            // Стул
+            createChair();
+            
+            // Шкаф
+            createWardrobe();
+            
+            // Полки
+            createShelves();
+            
+            // Компьютер
+            createComputer();
+            
+            // Гитара
+            createGuitar();
+            
+            // Постеры на стенах
+            createPosters();
+            
+            // Лампа
+            createLamp();
+            
+            // Растение
+            createPlant();
+        }
+        
+        function createBed() {
+            const bedGroup = new THREE.Group();
+            
+            // Матрас
+            const mattressGeometry = new THREE.BoxGeometry(4, 0.5, 6);
+            const mattressMaterial = new THREE.MeshLambertMaterial({ color: 0x4169E1 });
+            const mattress = new THREE.Mesh(mattressGeometry, mattressMaterial);
+            mattress.position.y = 1.5;
+            mattress.castShadow = true;
+            bedGroup.add(mattress);
+            
+            // Одеяло
+            const blanketGeometry = new THREE.BoxGeometry(4.2, 0.1, 4);
+            const blanketMaterial = new THREE.MeshLambertMaterial({ color: 0xFF69B4 });
+            const blanket = new THREE.Mesh(blanketGeometry, blanketMaterial);
+            blanket.position.set(0, 1.8, 1);
+            blanket.castShadow = true;
+            bedGroup.add(blanket);
+            
+            // Подушки
+            const pillowGeometry = new THREE.BoxGeometry(1.5, 0.3, 1);
+            const pillowMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+            
+            const pillow1 = new THREE.Mesh(pillowGeometry, pillowMaterial);
+            pillow1.position.set(-1, 1.9, -2);
+            pillow1.castShadow = true;
+            bedGroup.add(pillow1);
+            
+            const pillow2 = new THREE.Mesh(pillowGeometry, pillowMaterial);
+            pillow2.position.set(1, 1.9, -2);
+            pillow2.castShadow = true;
+            bedGroup.add(pillow2);
+            
+            // Изголовье
+            const headboardGeometry = new THREE.BoxGeometry(4, 2, 0.2);
+            const headboardMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const headboard = new THREE.Mesh(headboardGeometry, headboardMaterial);
+            headboard.position.set(0, 2, -3);
+            headboard.castShadow = true;
+            bedGroup.add(headboard);
+            
+            bedGroup.position.set(-3, 0, -2);
+            scene.add(bedGroup);
+        }
+        
+        function createDesk() {
+            const deskGroup = new THREE.Group();
+            
+            // Столешница
+            const topGeometry = new THREE.BoxGeometry(4, 0.2, 2);
+            const topMaterial = new THREE.MeshLambertMaterial({ color: 0xDEB887 });
+            const top = new THREE.Mesh(topGeometry, topMaterial);
+            top.position.y = 2;
+            top.castShadow = true;
+            deskGroup.add(top);
+            
+            // Ножки
+            const legGeometry = new THREE.BoxGeometry(0.2, 2, 0.2);
+            const legMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            
+            const positions = [
+                [-1.8, 1, -0.8],
+                [1.8, 1, -0.8],
+                [-1.8, 1, 0.8],
+                [1.8, 1, 0.8]
+            ];
+            
+            positions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeometry, legMaterial);
+                leg.position.set(...pos);
+                leg.castShadow = true;
+                deskGroup.add(leg);
+            });
+            
+            // Ящики
+            const drawerGeometry = new THREE.BoxGeometry(0.8, 0.6, 1.5);
+            const drawerMaterial = new THREE.MeshLambertMaterial({ color: 0xA0522D });
+            
+            for (let i = 0; i < 3; i++) {
+                const drawer = new THREE.Mesh(drawerGeometry, drawerMaterial);
+                drawer.position.set(-1.2 + i * 0.9, 1.2, 0);
+                drawer.castShadow = true;
+                deskGroup.add(drawer);
+            }
+            
+            deskGroup.position.set(3, 0, -3);
+            scene.add(deskGroup);
+        }
+        
+        function createChair() {
+            const chairGroup = new THREE.Group();
+            
+            // Сиденье
+            const seatGeometry = new THREE.BoxGeometry(1.5, 0.2, 1.5);
+            const seatMaterial = new THREE.MeshLambertMaterial({ color: 0x2F4F4F });
+            const seat = new THREE.Mesh(seatGeometry, seatMaterial);
+            seat.position.y = 1.5;
+            seat.castShadow = true;
+            chairGroup.add(seat);
+            
+            // Спинка
+            const backGeometry = new THREE.BoxGeometry(1.5, 2, 0.2);
+            const backMaterial = new THREE.MeshLambertMaterial({ color: 0x2F4F4F });
+            const back = new THREE.Mesh(backGeometry, backMaterial);
+            back.position.set(0, 2.5, -0.65);
+            back.castShadow = true;
+            chairGroup.add(back);
+            
+            // Ножки
+            const legGeometry = new THREE.BoxGeometry(0.15, 1.5, 0.15);
+            const legMaterial = new THREE.MeshLambertMaterial({ color: 0x696969 });
+            
+            const positions = [
+                [-0.6, 0.75, -0.6],
+                [0.6, 0.75, -0.6],
+                [-0.6, 0.75, 0.6],
+                [0.6, 0.75, 0.6]
+            ];
+            
+            positions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeometry, legMaterial);
+                leg.position.set(...pos);
+                leg.castShadow = true;
+                chairGroup.add(leg);
+            });
+            
+            chairGroup.position.set(3, 0, -1);
+            chairGroup.rotation.y = Math.PI;
+            scene.add(chairGroup);
+        }
+        
+        function createWardrobe() {
+            const wardrobeGroup = new THREE.Group();
+            
+            // Корпус
+            const bodyGeometry = new THREE.BoxGeometry(3, 6, 1.5);
+            const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 3;
+            body.castShadow = true;
+            wardrobeGroup.add(body);
+            
+            // Двери
+            const doorGeometry = new THREE.BoxGeometry(1.4, 5.5, 0.1);
+            const doorMaterial = new THREE.MeshLambertMaterial({ color: 0xA0522D });
+            
+            const door1 = new THREE.Mesh(doorGeometry, doorMaterial);
+            door1.position.set(-0.7, 3, 0.8);
+            wardrobeGroup.add(door1);
+            
+            const door2 = new THREE.Mesh(doorGeometry, doorMaterial);
+            door2.position.set(0.7, 3, 0.8);
+            wardrobeGroup.add(door2);
+            
+            // Ручки
+            const handleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.3);
+            const handleMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+            
+            const handle1 = new THREE.Mesh(handleGeometry, handleMaterial);
+            handle1.position.set(-0.3, 3, 0.9);
+            handle1.rotation.z = Math.PI / 2;
+            wardrobeGroup.add(handle1);
+            
+            const handle2 = new THREE.Mesh(handleGeometry, handleMaterial);
+            handle2.position.set(0.3, 3, 0.9);
+            handle2.rotation.z = Math.PI / 2;
+            wardrobeGroup.add(handle2);
+            
+            wardrobeGroup.position.set(-4, 0, 3);
+            wardrobeGroup.rotation.y = Math.PI / 2;
+            scene.add(wardrobeGroup);
+        }
+        
+        function createShelves() {
+            const shelvesGroup = new THREE.Group();
+            
+            // Полки
+            const shelfGeometry = new THREE.BoxGeometry(3, 0.1, 1);
+            const shelfMaterial = new THREE.MeshLambertMaterial({ color: 0xDEB887 });
+            
+            for (let i = 0; i < 4; i++) {
+                const shelf = new THREE.Mesh(shelfGeometry, shelfMaterial);
+                shelf.position.set(0, 1 + i * 1.5, 0);
+                shelf.castShadow = true;
+                shelvesGroup.add(shelf);
+            }
+            
+            // Боковые стенки
+            const sideGeometry = new THREE.BoxGeometry(0.1, 6, 1);
+            const sideMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            
+            const leftSide = new THREE.Mesh(sideGeometry, sideMaterial);
+            leftSide.position.set(-1.5, 3, 0);
+            leftSide.castShadow = true;
+            shelvesGroup.add(leftSide);
+            
+            const rightSide = new THREE.Mesh(sideGeometry, sideMaterial);
+            rightSide.position.set(1.5, 3, 0);
+            rightSide.castShadow = true;
+            shelvesGroup.add(rightSide);
+            
+            // Книги на полках
+            const bookColors = [0xFF6B6B, 0x4ECDC4, 0xFFE66D, 0x95E1D3, 0xF38181];
+            for (let shelf = 0; shelf < 3; shelf++) {
+                for (let book = 0; book < 5; book++) {
+                    const bookGeometry = new THREE.BoxGeometry(0.3, 0.8, 0.1);
+                    const bookMaterial = new THREE.MeshLambertMaterial({ 
+                        color: bookColors[Math.floor(Math.random() * bookColors.length)]
+                    });
+                    const bookMesh = new THREE.Mesh(bookGeometry, bookMaterial);
+                    bookMesh.position.set(-1 + book * 0.4, 1.5 + shelf * 1.5, 0.3);
+                    bookMesh.castShadow = true;
+                    shelvesGroup.add(bookMesh);
+                }
+            }
+            
+            shelvesGroup.position.set(4, 0, 3);
+            shelvesGroup.rotation.y = -Math.PI / 2;
+            scene.add(shelvesGroup);
+        }
+        
+        function createComputer() {
+            const computerGroup = new THREE.Group();
+            
+            // Монитор
+            const monitorGeometry = new THREE.BoxGeometry(2, 1.2, 0.2);
+            const monitorMaterial = new THREE.MeshLambertMaterial({ color: 0x2C3E50 });
+            const monitor = new THREE.Mesh(monitorGeometry, monitorMaterial);
+            monitor.position.y = 2.8;
+            monitor.castShadow = true;
+            computerGroup.add(monitor);
+            
+            // Экран
+            const screenGeometry = new THREE.PlaneGeometry(1.8, 1);
+            const screenMaterial = new THREE.MeshBasicMaterial({ color: 0x00CED1 });
+            const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+            screen.position.set(0, 2.8, 0.11);
+            computerGroup.add(screen);
+            
+            // Подставка монитора
+            const standGeometry = new THREE.BoxGeometry(0.3, 0.5, 0.3);
+            const standMaterial = new THREE.MeshLambertMaterial({ color: 0x2C3E50 });
+            const stand = new THREE.Mesh(standGeometry, standMaterial);
+            stand.position.set(0, 2.3, 0);
+            stand.castShadow = true;
+            computerGroup.add(stand);
+            
+            // Клавиатура
+            const keyboardGeometry = new THREE.BoxGeometry(1.5, 0.1, 0.5);
+            const keyboardMaterial = new THREE.MeshLambertMaterial({ color: 0x34495E });
+            const keyboard = new THREE.Mesh(keyboardGeometry, keyboardMaterial);
+            keyboard.position.set(0, 2.05, 0.5);
+            keyboard.castShadow = true;
+            computerGroup.add(keyboard);
+            
+            // Мышь
+            const mouseGeometry = new THREE.BoxGeometry(0.3, 0.1, 0.4);
+            const mouseMaterial = new THREE.MeshLambertMaterial({ color: 0x34495E });
+            const mouse = new THREE.Mesh(mouseGeometry, mouseMaterial);
+            mouse.position.set(1, 2.05, 0.5);
+            mouse.castShadow = true;
+            computerGroup.add(mouse);
+            
+            computerGroup.position.set(3, 0, -3);
+            scene.add(computerGroup);
+        }
+        
+        function createGuitar() {
+            const guitarGroup = new THREE.Group();
+            
+            // Корпус гитары
+            const bodyGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+            const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.scale.set(1, 1.2, 0.3);
+            body.castShadow = true;
+            guitarGroup.add(body);
+            
+            // Гриф
+            const neckGeometry = new THREE.BoxGeometry(0.15, 2, 0.1);
+            const neckMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const neck = new THREE.Mesh(neckGeometry, neckMaterial);
+            neck.position.set(0, 1.5, 0);
+            neck.castShadow = true;
+            guitarGroup.add(neck);
+            
+            // Головка грифа
+            const headGeometry = new THREE.BoxGeometry(0.3, 0.4, 0.1);
+            const headMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.set(0, 2.7, 0);
+            head.castShadow = true;
+            guitarGroup.add(head);
+            
+            guitarGroup.position.set(-5, 1, 2);
+            guitarGroup.rotation.z = Math.PI / 6;
+            scene.add(guitarGroup);
+        }
+        
+        function createPosters() {
+            // Постер 1 на задней стене (сдвинул левее, чтобы не перекрывать окно)
+            const poster1Geometry = new THREE.PlaneGeometry(2, 3);
+            const poster1Material = new THREE.MeshLambertMaterial({ color: 0xFF1493 });
+            const poster1 = new THREE.Mesh(poster1Geometry, poster1Material);
+            poster1.position.set(-4, 4, -4.9);
+            scene.add(poster1);
+            
+            // Постер 2 на задней стене (сдвинул правее)
+            const poster2Geometry = new THREE.PlaneGeometry(1.5, 2);
+            const poster2Material = new THREE.MeshLambertMaterial({ color: 0x00FF7F });
+            const poster2 = new THREE.Mesh(poster2Geometry, poster2Material);
+            poster2.position.set(4, 3.5, -4.9);
+            scene.add(poster2);
+            
+            // Постер 3 на правой стене
+            const poster3Geometry = new THREE.PlaneGeometry(2, 2.5);
+            const poster3Material = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+            const poster3 = new THREE.Mesh(poster3Geometry, poster3Material);
+            poster3.position.set(5.9, 4, 0);
+            poster3.rotation.y = -Math.PI / 2;
+            scene.add(poster3);
+        }
+        
+        function createLamp() {
+            const lampGroup = new THREE.Group();
+            
+            // Основание
+            const baseGeometry = new THREE.CylinderGeometry(0.3, 0.4, 0.2);
+            const baseMaterial = new THREE.MeshLambertMaterial({ color: 0x2F4F4F });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.castShadow = true;
+            lampGroup.add(base);
+            
+            // Стойка
+            const poleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 3);
+            const poleMaterial = new THREE.MeshLambertMaterial({ color: 0x696969 });
+            const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+            pole.position.y = 1.5;
+            pole.castShadow = true;
+            lampGroup.add(pole);
+            
+            // Абажур
+            const shadeGeometry = new THREE.ConeGeometry(0.8, 1, 16, 1, true);
+            const shadeMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xFFA500,
+                transparent: true,
+                opacity: 0.8
+            });
+            const shade = new THREE.Mesh(shadeGeometry, shadeMaterial);
+            shade.position.y = 3;
+            shade.castShadow = true;
+            lampGroup.add(shade);
+            
+            // Лампочка
+            const bulbGeometry = new THREE.SphereGeometry(0.2);
+            const bulbMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFF00 });
+            const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
+            bulb.position.y = 2.8;
+            lampGroup.add(bulb);
+            
+            lampGroup.position.set(-2, 0, 3);
+            scene.add(lampGroup);
+        }
+        
+        function createPlant() {
+            const plantGroup = new THREE.Group();
+            
+            // Горшок
+            const potGeometry = new THREE.CylinderGeometry(0.4, 0.3, 0.6);
+            const potMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const pot = new THREE.Mesh(potGeometry, potMaterial);
+            pot.position.y = 0.3;
+            pot.castShadow = true;
+            plantGroup.add(pot);
+            
+            // Земля
+            const soilGeometry = new THREE.CylinderGeometry(0.35, 0.35, 0.1);
+            const soilMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const soil = new THREE.Mesh(soilGeometry, soilMaterial);
+            soil.position.y = 0.55;
+            plantGroup.add(soil);
+            
+            // Стебель
+            const stemGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1.5);
+            const stemMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+            const stem = new THREE.Mesh(stemGeometry, stemMaterial);
+            stem.position.y = 1.3;
+            stem.castShadow = true;
+            plantGroup.add(stem);
+            
+            // Листья
+            const leafGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+            const leafMaterial = new THREE.MeshLambertMaterial({ color: 0x32CD32 });
+            
+            const leafPositions = [
+                [0.3, 1.8, 0],
+                [-0.3, 2, 0],
+                [0, 2.2, 0.3],
+                [0, 2.2, -0.3]
+            ];
+            
+            leafPositions.forEach(pos => {
+                const leaf = new THREE.Mesh(leafGeometry, leafMaterial);
+                leaf.position.set(...pos);
+                leaf.scale.set(1, 0.3, 1);
+                leaf.castShadow = true;
+                plantGroup.add(leaf);
+            });
+            
+            plantGroup.position.set(4, 0, -2);
+            scene.add(plantGroup);
+        }
+        
+        function setupEventListeners() {
+            // Чекбоксы для стен
+            document.getElementById('front-wall').addEventListener('change', function() {
+                walls.front.visible = this.checked;
+            });
+            
+            document.getElementById('back-wall').addEventListener('change', function() {
+                walls.back.visible = this.checked;
+            });
+            
+            document.getElementById('left-wall').addEventListener('change', function() {
+                walls.left.visible = this.checked;
+            });
+            
+            document.getElementById('right-wall').addEventListener('change', function() {
+                walls.right.visible = this.checked;
+            });
+            
+            // Изменение размера окна
+            window.addEventListener('resize', onWindowResize, false);
+        }
+        
+        function setPreset(preset) {
+            switch(preset) {
+                case 'all':
+                    walls.front.visible = true;
+                    walls.back.visible = true;
+                    walls.left.visible = true;
+                    walls.right.visible = true;
+                    updateCheckboxes(true, true, true, true);
+                    break;
+                case 'back-only':
+                    walls.front.visible = false;
+                    walls.back.visible = true;
+                    walls.left.visible = false;
+                    walls.right.visible = false;
+                    updateCheckboxes(false, true, false, false);
+                    break;
+                case 'floor-only':
+                    walls.front.visible = false;
+                    walls.back.visible = false;
+                    walls.left.visible = false;
+                    walls.right.visible = false;
+                    updateCheckboxes(false, false, false, false);
+                    break;
+            }
+        }
+        
+        function updateCheckboxes(front, back, left, right) {
+            document.getElementById('front-wall').checked = front;
+            document.getElementById('back-wall').checked = back;
+            document.getElementById('left-wall').checked = left;
+            document.getElementById('right-wall').checked = right;
+        }
+        
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            const d = 10;
+            
+            camera.left = -d * aspect;
+            camera.right = d * aspect;
+            camera.top = d;
+            camera.bottom = -d;
+            
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Запуск приложения
+        init();
+    </script>
+</body>
+</html>
+
